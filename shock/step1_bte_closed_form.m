@@ -1,3 +1,4 @@
+function step1_bte_closed_form
 %% Step 1: Biphasic truncated exponential (BTE) shock, closed-form model
 % Battery-free AED study. Computes stored, residual and delivered energy,
 % peak current and pulse duration at the seven IEC 60601-2-4 test loads
@@ -5,7 +6,8 @@
 % Check case: Dhurjaty and Atre 2016 (120 uF charged to 1700 V, truncated at 150 V).
 % Units: SI throughout (F, V, ohm, s, J, A).
 
-% Note: no clear/clc here, so other work in the MATLAB workspace and Command Window is left alone.
+% Written as a function, so its variables never touch the base workspace.
+% No clear/clc, so other work in the Command Window is left alone.
 % All printed output is also saved to step1_output.txt, and the table to step1_results.csv.
 if exist('step1_output.txt','file'), delete('step1_output.txt'); end
 diary('step1_output.txt');
@@ -62,6 +64,8 @@ legend('Location','northeast'); set(gca,'FontName','Times New Roman','FontSize',
 exportgraphics(gcf, 'fig_step1_bte_waveforms.png', 'Resolution', 300);
 diary off;
 fprintf('Saved step1_output.txt, step1_results.csv and fig_step1_bte_waveforms.png\n');
+
+end
 
 %% ------------------------------------------------------------------------
 function T = bte_table(C, V0, Vtr, r, tcap, split, R)

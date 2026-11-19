@@ -127,7 +127,10 @@ function [t_end, E_in, E_cap, E_loss_fb, E_leak] = charge_time_const_power(p, P_
     function P = P_in_used(v)
         P = i_out(v)*v/eta;             % input power actually drawn (less than P_in while current-limited)
     end
-    opts = odeset('Events', @(t,x) deal(x(1) - p.V_target, 1, 1), 'RelTol', 1e-8, 'AbsTol', 1e-8);
+    function [val, term, dir] = evFull(~, x)
+        val = x(1) - p.V_target; term = 1; dir = 1;   % stop when the HV capacitor is full
+    end
+    opts = odeset('Events', @evFull, 'RelTol', 1e-8, 'AbsTol', 1e-8);
     [~, ~, te, xe] = ode45(f, [0 600], [0;0;0], opts);
     t_end = te(end); E_in = xe(end,2); E_leak = xe(end,3);
     E_cap = 0.5*p.C_hv*xe(end,1)^2;

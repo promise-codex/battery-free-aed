@@ -13,6 +13,7 @@ A physics-constrained comparison of power and energy-storage designs for automat
 |---|---|---|
 | `shock/` | 1 | Closed-form biphasic truncated exponential shock at the seven IEC test loads |
 | `charger/` | 2 | Averaged flyback charging of the shock capacitor from a hand crank, a supercapacitor string and an LFP battery |
+| `storage/` | 3 | Supercapacitor and LFP battery ageing and self-discharge in Nigerian heat (NASA POWER hourly weather, cabinet and parked-vehicle cases), plus crank start-up time |
 
 ## How to run (MATLAB Online R2026b)
 
@@ -22,7 +23,11 @@ cd battery-free-aed/shock
 step1_bte_closed_form
 cd ../charger
 step2_charger_average
+cd ../storage
+step3_storage_heat
 ```
+
+Step 3 downloads hourly weather from NASA POWER (no account needed) into `storage/data` on its first run.
 
 To get updates later: `cd` into the repository folder and run `!git pull`.
 

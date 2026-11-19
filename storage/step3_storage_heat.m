@@ -43,7 +43,7 @@ sites = struct('name', {'Ile-Ife','Lagos','Abuja','Maiduguri','Doha'}, ...
                'lon',  {4.56, 3.40, 7.49, 13.16, 51.53});
 nS = numel(sites); iNG = 1:4; iDoha = 5;
 years = 2019:2023; nY = numel(years);
-dataDir = 'data'; if ~exist(dataDir,'dir'), mkdir(dataDir); end
+dataDir = fullfile(pwd, 'data'); if ~isfolder(dataDir), mkdir(dataDir); end
 
 clim = struct('t',{},'T',{},'G',{},'nMiss',{});
 for s = 1:nS
@@ -340,11 +340,13 @@ function [t, T, G, nMiss] = get_power(site, yr, dataDir)
               '&start=%d0101&end=%d1231&format=CSV&time-standard=LST'], site.lon, site.lat, yr, yr);
         fprintf('Downloading %s %d from NASA POWER ...\n', site.name, yr);
         try
-            websave(fname, url, weboptions('Timeout', 180));
+            txt = webread(url, weboptions('Timeout', 180, 'ContentType', 'text'));
         catch err
-            if isfile(fname), delete(fname); end
             error('Download failed for %s %d: %s\nURL: %s', site.name, yr, err.message, url);
         end
+        fid = fopen(fname, 'w');
+        if fid < 0, error('Cannot write %s. Check the folder is writable.', fname); end
+        fwrite(fid, txt, 'char'); fclose(fid);
     end
     lines = splitlines(string(fileread(fname)));
     iH = find(startsWith(strtrim(lines), "YEAR"), 1);

@@ -97,17 +97,22 @@ fprintf('Energy balance (24 W, eta 0.75): in %.2f J = cap %.2f + flyback loss %.
         E_in, E_cap, E_loss_fb, E_leak, bal);
 
 %% Figure: charge time versus crank power
-figure('Color','w','Position',[100 100 760 420]); hold on; box on;
+figure('Color','w','Position',[100 100 820 460]); hold on; box on; grid on;
+fill([23.5 24.5 24.5 23.5], [8 8 12 12], [0.55 0.55 0.55], 'FaceAlpha', 0.35, ...
+     'EdgeColor', 'none', 'DisplayName', 'Dhurjaty and Atre 2016: 8 to 12 s at 24 W');
 mk = {'o-','s-','^-'};
 for b = 1:numel(etas)
-    plot(P_crank, tA(:,b), mk{b}, 'LineWidth', 1.5, 'DisplayName', sprintf('\\eta = %.2f', etas(b)));
+    plot(P_crank, tA(:,b), mk{b}, 'LineWidth', 1.5, 'MarkerSize', 6, ...
+         'DisplayName', sprintf('Flyback efficiency %.2f', etas(b)));
 end
-yline(t_limit - t_analysis, 'r--', 'Time left for charging within the 30 s limit', 'LineWidth', 1.2, ...
-      'LabelHorizontalAlignment','left', 'HandleVisibility','off');
-plot([24 24], [8 12], 'k-', 'LineWidth', 4, 'DisplayName', 'Dhurjaty and Atre 2016 (8 to 12 s)');
-xlabel('Electrical power from hand crank (W)'); ylabel('Time to charge 120 \muF to 1700 V (s)');
+plot([18 56], (t_limit - t_analysis)*[1 1], 'r--', 'LineWidth', 1.2, ...
+     'DisplayName', sprintf('Charge time allowed by the 30 s limit (%.0f s)', t_limit - t_analysis));
+xlim([18 56]); ylim([0 26]);
+xlabel('Electrical power from hand crank (W)');
+ylabel('Time to charge 120 \muF to 1700 V (s)');
 title('Hand-crank charging of the shock capacitor');
-legend('Location','northeast'); set(gca,'FontName','Times New Roman','FontSize',12);
+legend('Location','northeast','Box','on');
+set(gca,'FontName','Times New Roman','FontSize',12);
 exportgraphics(gcf, 'fig_step2_crank_charge_time.png', 'Resolution', 300);
 
 diary off;

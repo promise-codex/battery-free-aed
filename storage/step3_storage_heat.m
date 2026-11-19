@@ -158,9 +158,12 @@ fprintf('String voltage needed for 1 shock charge: %.2f V; for 3 charges: %.2f V
         V_need1, V_need3, sc.Vmax);
 
 %% Supercapacitor in heat
-% (a) Life used up if the string is held at 2.7 V per cell (solar or mains float)
-%     life(T) = 1000 h * 2^((65 - T)/10). Above 65 C the datasheet requires 2.3 V,
-%     so hours above 65 C are counted separately and the extrapolation is flagged.
+% (a) Life used up if the string is held full by a solar or mains float charger
+%     at 2.7 V per cell: life(T) = 1000 h * 2^((65 - T)/10)        (datasheet + Eaton rule)
+%     at 2.3 V per cell: life(T) = 1000 h * 2^((85 - T)/10)
+%       The 2.3 V line assumes the rated life also holds at the derated point
+%       (85 C, 2.3 V) of the datasheet. UNVERIFIED: the datasheet gives the derating
+%       but no life figure at 2.3 V.
 % (b) Self-discharge on the shelf after one full charge (crank or solar refilled design)
 %     I_leak = I20 * (V/2.7) * 2^((T - 20)/dT_d)
 %     The proportional-to-voltage form and the doubling interval dT_d are UNVERIFIED
@@ -173,6 +176,7 @@ for s = 1:nS
         Tk = Tcase{s,c};
         dmg = 1 ./ (sc.L65 * 2.^((65 - Tk)/10));          % fraction of life per hour
         life_yr = nY / sum(dmg);
+        life23_yr = nY / sum(1 ./ (sc.L65 * 2.^((85 - Tk)/10)));
         dd = zeros(1, numel(dTd)); dd_min = NaN;
         for m = 1:numel(dTd)
             rate = sc.I_leak20/(sc.V_cell*sc.C_cell) .* 2.^((Tk - 20)/dTd(m)) * 3600;  % [1/h]
@@ -180,13 +184,17 @@ for s = 1:nS
             dd(m) = median(days);
             if m == 1, dd_min = min(days); end
         end
-        TSC = [TSC; table(string(sites(s).name), string(caseNames{c}), life_yr, ...
+        TSC = [TSC; table(string(sites(s).name), string(caseNames{c}), life_yr, life23_yr, ...
                dd(1), dd_min, dd(2), dd(3), 'VariableNames', ...
-               {'Site','Case','life_held_2V7_years','shelf_days_median','shelf_days_min', ...
+               {'Site','Case','life_held_2V7_years','life_held_2V3_years','shelf_days_median','shelf_days_min', ...
                 'shelf_days_median_dTd7','shelf_days_median_dTd15'})]; %#ok<AGROW>
     end
 end
-fprintf('Supercapacitor in heat. life_held_2V7 = years to end of life when held full;\n');
+s23 = sc; s23.V_cell = 2.3; s23 = sc_derive(s23); s23.Vmin = sc.Vmin;
+n23 = sc_count(p, s23, eta, s23.Vmax, Inf);
+fprintf('Float at 2.3 V per cell (%.1f V string): %d full charges instead of %d at 2.7 V.\n', ...
+        s23.Vmax, n23, sc_count(p, sc, eta, sc.Vmax, Inf));
+fprintf('Supercapacitor in heat. life_held = years to end of life when held full at 2.7 or 2.3 V per cell;\n');
 fprintf('shelf_days = days after one full charge until it can no longer give 1 shock charge\n');
 fprintf('(median and minimum over every month start in %d to %d):\n', years(1), years(end));
 disp(TSC);
@@ -221,21 +229,25 @@ for s = 1:nS
         y80_sqrt = L.t3*(0.20/L.fade3)^2/teq_per_yr;
         y80_lin  = L.t3*(0.20/L.fade3)/teq_per_yr;
         sdr = L.sd25/L.month_h .* 2.^((Tk - 25)/10);         % SOC lost per hour
-        soc6 = zeros(1,numel(drains)); soc12 = soc6;
+        soc6 = zeros(1,numel(drains)); soc12 = soc6; mo_empty = soc6;
         for m = 1:numel(drains)
             dr = sdr + drains(m)/L.Q;                         % SOC lost per hour incl. drain
-            soc6(m)  = 1 - max(window_sum(clim(s).t, dr, round(6*L.month_h)));
-            soc12(m) = 1 - max(window_sum(clim(s).t, dr, 8766));
+            soc6(m)  = max(0, 1 - max(window_sum(clim(s).t, dr, round(6*L.month_h))));
+            soc12(m) = max(0, 1 - max(window_sum(clim(s).t, dr, 8766)));
+            % months until fewer than 20 shock charges are left (worst month start)
+            mo_empty(m) = min(shelf_days(clim(s).t, dr, 1 - SOC20, 24*730)) / (730.5/24);
         end
         TL = [TL; table(string(sites(s).name), string(caseNames{c}), teq_per_yr, ...
               100*f1_sqrt, 100*f1_lin, y80_sqrt, y80_lin, ...
-              100*soc6(1), 100*soc12(1), 100*soc12(2), 100*soc12(3), 'VariableNames', ...
+              100*soc6(1), 100*soc12(1), mo_empty(1), mo_empty(2), mo_empty(3), 'VariableNames', ...
               {'Site','Case','teq35_yr_per_yr','fade_1yr_sqrt_pct','fade_1yr_lin_pct', ...
                'years_to_80pct_sqrt','years_to_80pct_lin', ...
-               'SOC_6mo_worst_pct','SOC_12mo_worst_pct','SOC_12mo_0p1mA_pct','SOC_12mo_0p5mA_pct'})]; %#ok<AGROW>
+               'SOC_6mo_worst_pct','SOC_12mo_worst_pct','months_to_empty_0mA','months_to_empty_0p1mA','months_to_empty_0p5mA'})]; %#ok<AGROW>
     end
 end
-fprintf('LFP in heat (SOC values are the worst over every month start; negative = flat before 12 months):\n');
+fprintf('LFP in heat. SOC values are the worst over every month start (0 = empty).\n');
+fprintf('months_to_empty = worst-case months from full until fewer than 20 shock charges are left\n');
+fprintf('(standby drain 0 / 0.1 / 0.5 mA; 24 means 24 or more).\n');
 disp(TL);
 writetable(TL, 'step3_lfp.csv');
 
@@ -299,29 +311,34 @@ title(tl, sprintf('Storage temperature of an AED, NASA POWER %d to %d', years(1)
 exportgraphics(f1, 'fig_step3_temperature.png', 'Resolution', 300);
 
 %% Figure 2: storage results for the Nigerian sites
-f2h = figure('Color','w','Position',[60 60 1250 430]);
-tl2 = tiledlayout(f2h, 1, 3, 'TileSpacing', 'compact', 'Padding', 'compact');
+f2h = figure('Color','w','Position',[60 60 1150 820]);
+tl2 = tiledlayout(f2h, 2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 pick = @(Tab, var, cs) arrayfun(@(s) Tab.(var)(Tab.Site==sites(s).name & Tab.Case==cs), iNG);
-panels = {TSC, 'life_held_2V7_years', 'Supercapacitor held full: years to end of life';
-          TSC, 'shelf_days_median',   'Supercapacitor on the shelf: days to last shock';
-          TL,  'years_to_80pct_lin',  'LFP battery: years to 80 % capacity (linear model)'};
-for k = 1:3
+panels = {TSC, 'life_held_2V7_years',   '(a) Supercapacitor held full at 2.7 V',     'Years to end of life';
+          TSC, 'shelf_days_median',     '(b) Supercapacitor left after one charge',  'Days until no shock is left';
+          TL,  'years_to_80pct_lin',    '(c) LFP battery capacity fade',             'Years to 80 % capacity';
+          TL,  'months_to_empty_0p1mA', '(d) LFP battery with 0.1 mA standby drain', 'Months until under 20 shocks'};
+for k = 1:size(panels,1)
     ax = nexttile(tl2); hold(ax,'on'); box(ax,'on'); grid(ax,'on');
     Tab = panels{k,1}; v = panels{k,2};
     yc = pick(Tab, v, "cabinet"); ym = pick(Tab, v, "vehicle_mid");
     yl = pick(Tab, v, "vehicle_low"); yh = pick(Tab, v, "vehicle_high");
     b = bar(ax, 1:numel(iNG), [yc(:) ym(:)], 'grouped');
     b(1).FaceColor = cols(1,:); b(2).FaceColor = cols(2,:);
-    b(1).DisplayName = 'Shaded cabinet'; b(2).DisplayName = 'Parked vehicle (mid; bar = low to high)';
+    b(1).DisplayName = 'Shaded cabinet';
+    b(2).DisplayName = 'Parked vehicle, mid offset (error bar: low to high offset)';
     xe = b(2).XEndPoints;
     errorbar(ax, xe, ym, ym - min(yl,yh), max(yl,yh) - ym, 'k.', 'LineWidth', 1.0, ...
              'HandleVisibility', 'off');
     xticks(ax, 1:numel(iNG)); xticklabels(ax, {sites(iNG).name}); xlim(ax, [0.4 numel(iNG)+0.6]);
-    ylim(ax, [0 inf]);
+    ylim(ax, [0 1.15*max([yc(:); yl(:); yh(:)])]);
     title(ax, panels{k,3}, 'FontWeight', 'normal');
-    set(ax, 'FontName', 'Times New Roman', 'FontSize', 11);
-    if k == 1, legend(ax, 'Location', 'northeast', 'Box', 'off'); end
+    ylabel(ax, panels{k,4});
+    set(ax, 'FontName', 'Times New Roman', 'FontSize', 12);
 end
+lgd2 = legend(ax, 'Orientation', 'horizontal', 'Box', 'off');
+lgd2.Layout.Tile = 'south';
+set(lgd2, 'FontName', 'Times New Roman', 'FontSize', 12);
 exportgraphics(f2h, 'fig_step3_storage.png', 'Resolution', 300);
 
 diary off;

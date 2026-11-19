@@ -5,7 +5,10 @@
 % Check case: Dhurjaty and Atre 2016 (120 uF charged to 1700 V, truncated at 150 V).
 % Units: SI throughout (F, V, ohm, s, J, A).
 
-clear; clc;
+% Note: no clear/clc here, so other work in the MATLAB workspace and Command Window is left alone.
+% All printed output is also saved to step1_output.txt, and the table to step1_results.csv.
+if exist('step1_output.txt','file'), delete('step1_output.txt'); end
+diary('step1_output.txt');
 
 %% Parameters
 C_hv   = 120e-6;            % high-voltage capacitor [F]   (Dhurjaty and Atre 2016)
@@ -22,6 +25,7 @@ fprintf('Stored energy E0 = %.1f J\n\n', E0);
 
 res = bte_table(C_hv, V0, V_trunc, r_int, t_cap, split, R_iec);
 disp(res);
+writetable(res, 'step1_results.csv');
 
 %% Sensitivity: internal resistance 2 to 10 ohm, and 18 ms cap
 fprintf('\nSensitivity of delivered energy [J] to internal resistance and cap:\n');
@@ -56,6 +60,8 @@ xlabel('Time (ms)'); ylabel('Patient current (A)');
 title('Biphasic truncated exponential shock, 120 \muF charged to 1700 V');
 legend('Location','northeast'); set(gca,'FontName','Times New Roman','FontSize',12);
 exportgraphics(gcf, 'fig_step1_bte_waveforms.png', 'Resolution', 300);
+diary off;
+fprintf('Saved step1_output.txt, step1_results.csv and fig_step1_bte_waveforms.png\n');
 
 %% ------------------------------------------------------------------------
 function T = bte_table(C, V0, Vtr, r, tcap, split, R)

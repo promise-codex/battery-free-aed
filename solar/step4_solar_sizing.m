@@ -161,22 +161,28 @@ f = figure('Color','w','Position',[60 60 1200 470]);
 tl = tiledlayout(f, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 ax1 = nexttile(tl); hold(ax1,'on'); box(ax1,'on'); grid(ax1,'on');
 ax2 = nexttile(tl); hold(ax2,'on'); box(ax2,'on'); grid(ax2,'on');
+h_floor = 0.5;                                          % zero is drawn at this level on the log axis
 for s = 1:nS
     for c = 1:nC
         ls = '-o'; if c == 2, ls = '--s'; end
+        xo = 2^(((s-2.5)*2 + (c-1.5))*0.025);              % small sideways shift so lines do not hide each other
         r = TA(TA.Site==sites(s).name & TA.Case==caseNames{c} & TA.drain_mA==0.1, :);
-        plot(ax1, r.Wp, r.SC_ready3_pct, ls, 'Color', cols(s,:), 'LineWidth', 1.3, 'MarkerSize', 5, ...
+        short_h = (100 - r.SC_ready3_pct)/100 * 8766;      % hours per year below 3 charges
+        plot(ax1, r.Wp*xo, max(short_h, h_floor), ls, 'Color', cols(s,:), 'LineWidth', 1.3, 'MarkerSize', 5, ...
              'DisplayName', sprintf('%s, %s', sites(s).name, strrep(caseNames{c}, '_mid', '')));
         q = TRc(TRc.Site==sites(s).name & TRc.Case==caseNames{c}, :);
-        plot(ax2, q.Wp, q.recover_h_p95, ls, 'Color', cols(s,:), 'LineWidth', 1.3, 'MarkerSize', 5, ...
+        plot(ax2, q.Wp*xo, q.recover_h_p95, ls, 'Color', cols(s,:), 'LineWidth', 1.3, 'MarkerSize', 5, ...
              'HandleVisibility', 'off');
     end
 end
 set([ax1 ax2], 'XScale', 'log', 'XLim', [0.08 6], 'XTick', Wp, 'FontName', 'Times New Roman', 'FontSize', 12);
-ylim(ax1, [0 105]); set(ax2, 'YScale', 'log');
-xlabel(ax1, 'Panel rating (W peak)'); ylabel(ax1, 'Hours with 3 shock charges stored (%)');
+set(ax1, 'YScale', 'log', 'YLim', [0.35 3000], 'YTick', [0.5 1 3 10 30 100 300 1000 3000], ...
+    'YTickLabel', {'0','1','3','10','30','100','300','1000','3000'}, 'YMinorGrid', 'on');
+set(ax2, 'YScale', 'log', 'YLim', [8 800], 'YTick', [8 10 12 15 20 30 50 100 200 400 720], ...
+    'YMinorGrid', 'on');
+xlabel(ax1, 'Panel rating (W peak)'); ylabel(ax1, 'Hours per year with fewer than 3 shock charges');
 title(ax1, '(a) Supercapacitor kept ready by solar (0.1 mA drain)', 'FontWeight', 'normal');
-xlabel(ax2, 'Panel rating (W peak)'); ylabel(ax2, 'Hours to refill to 3 charges, 95th percentile');
+xlabel(ax2, 'Panel rating (W peak)'); ylabel(ax2, 'Hours to refill to 3 charges (95th percentile)');
 title(ax2, '(b) Supercapacitor refill after a rescue', 'FontWeight', 'normal');
 lgd = legend(ax1, 'NumColumns', 4, 'Box', 'off'); lgd.Layout.Tile = 'south';
 set(lgd, 'FontName', 'Times New Roman', 'FontSize', 11);

@@ -58,6 +58,17 @@ E0 = 0.5*120e-6*1700^2; eta_fb = 0.75; E_shock = E0/eta_fb;   % energy drawn per
 sc.n = 6; sc.C = 100/6; sc.Vfloat = 6*2.3; sc.Vmin = 8.1;
 sc.V1 = 9.73; sc.V3 = 12.33;                % string voltage for 1 and 3 charges (step 3)
 sc.I20 = 260e-6; sc.Vr = 2.7; sc.Ccell = 100; sc.dTd = 10;
+% Option B: seven cells floated at 2.3 V (16.1 V), same long cell life as option A
+% but more margin above the 3-charge voltage. Thresholds from the step 2/3 flyback model.
+sc7 = sc; sc7.n = 7; sc7.C = 100/7; sc7.Vfloat = 7*2.3;
+fb.C_hv = 120e-6; fb.V_target = 1700; fb.R_leak = 100e6; fb.I_out_max = 1.0;
+s7.C = sc7.C; s7.ESR = 7*0.012; s7.Vmax = sc7.Vfloat; s7.Vmin = sc7.Vmin; s7.I_in_max = 6; s7.P_set = 50;
+sc7.V1 = sc_vneed(fb, s7, 0.75, 1); sc7.V3 = sc_vneed(fb, s7, 0.75, 3);
+s6 = s7; s6.C = sc.C; s6.ESR = 6*0.012; s6.Vmax = sc.Vfloat;
+fprintf('Check: 6-cell thresholds from the flyback model %.2f V and %.2f V (step 3: 9.73 and 12.33 V)\n', ...
+        sc_vneed(fb, s6, 0.75, 1), sc_vneed(fb, s6, 0.75, 3));
+fprintf('Option B, 7 cells at 2.3 V (%.1f V): 1 charge needs %.2f V, 3 charges need %.2f V, %d full charges.\n', ...
+        sc7.Vfloat, sc7.V1, sc7.V3, sc_count(fb, s7, 0.75, s7.Vmax, Inf));
 % LFP 4S IFR26650-33A
 L.V = 13.2; L.Q = 3.3; L.E = L.V*L.Q*3600; L.sd25 = 0.035/730.5;
 L.SOC20 = 20*E_shock/L.E;
@@ -86,12 +97,14 @@ for s = 1:nS
             Pch = eta_chg * pv_power(Wp(w), G, Tout, pv);          % [W] into storage
             for m = 1:numel(drains)
                 V = sim_supercap(Pch, Tst, sc, drains(m));
+                V7 = sim_supercap(Pch, Tst, sc7, drains(m));
                 S = sim_lfp(Pch, Tst, L, drains(m));
                 TA = [TA; table(string(sites(s).name), string(caseNames{c}), Wp(w), 1e3*drains(m), ...
                       100*mean(V >= sc.V3), 100*mean(V >= sc.V1), min(V), ...
+                      100*mean(V7 >= sc7.V3), min(V7), ...
                       100*mean(S >= L.SOC20), 100*min(S), ...
                       'VariableNames', {'Site','Case','Wp','drain_mA', ...
-                      'SC_ready3_pct','SC_ready1_pct','SC_Vmin_V', ...
+                      'SC_ready3_pct','SC_ready1_pct','SC_Vmin_V','SC7_ready3_pct','SC7_Vmin_V', ...
                       'LFP_ready20_pct','LFP_SOCmin_pct'})]; %#ok<AGROW>
             end
         end
@@ -108,8 +121,8 @@ for s = 1:nS
         for m = 1:numel(drains)
             r = TA(TA.Site==sites(s).name & TA.Case==caseNames{c} & TA.drain_mA==1e3*drains(m), :);
             TM = [TM; table(string(sites(s).name), string(caseNames{c}), 1e3*drains(m), ...
-                  first_wp(r.Wp, r.SC_ready3_pct), first_wp(r.Wp, r.LFP_ready20_pct), ...
-                  'VariableNames', {'Site','Case','drain_mA','SC_min_Wp','LFP_min_Wp'})]; %#ok<AGROW>
+                  first_wp(r.Wp, r.SC_ready3_pct), first_wp(r.Wp, r.SC7_ready3_pct), first_wp(r.Wp, r.LFP_ready20_pct), ...
+                  'VariableNames', {'Site','Case','drain_mA','SC_min_Wp','SC7_min_Wp','LFP_min_Wp'})]; %#ok<AGROW>
         end
     end
 end
@@ -122,6 +135,7 @@ writetable(TM, 'step4_min_panel.csv');
 % string reaches the voltage for 3 charges from sun alone. Leakage is taken at the
 % 3-charge voltage (an upper bound), with the 0.1 mA drain.
 dE = 0.5*sc.C*(sc.V3^2 - sc.Vmin^2);
+dE7 = 0.5*sc7.C*(sc7.V3^2 - sc7.Vmin^2);
 TRc = table();
 H = 30*24;
 for s = 1:nS
@@ -130,36 +144,33 @@ for s = 1:nS
         if c == 1, Tst = Tout; else, Tst = cabin_temp(Tout, G, k_mid, tau_min); end
         Vc = sc.V3/sc.n;
         P_loss = sc.n*Vc*sc.I20*(Vc/sc.Vr).*2.^((Tst - 20)/sc.dTd) + 0.1e-3*sc.V3;   % [W]
+        Vc7 = sc7.V3/sc7.n;
+        P_loss7 = sc7.n*Vc7*sc.I20*(Vc7/sc.Vr).*2.^((Tst - 20)/sc.dTd) + 0.1e-3*sc7.V3;
         hr = hour(clim(s).t);
         starts = find(ismember(hr, [0 6 12 18])); starts = starts(starts + H <= numel(G));
         for w = 1:nW
-            net = (eta_chg*pv_power(Wp(w), G, Tout, pv) - P_loss)*3600;   % [J per hour]
-            cs = [0; cumsum(net)];
-            h = nan(numel(starts),1);
-            for j = 1:numel(starts)
-                i0 = starts(j);
-                k = find(cs(i0+1:i0+H) - cs(i0) >= dE, 1);
-                if ~isempty(k), h(j) = k; end
-            end
-            fail = mean(isnan(h))*100;
-            h(isnan(h)) = H;
+            Pin = eta_chg*pv_power(Wp(w), G, Tout, pv);
+            [h, fail] = refill_hours((Pin - P_loss)*3600, starts, dE, H);
+            [h7, fail7] = refill_hours((Pin - P_loss7)*3600, starts, dE7, H);
             TRc = [TRc; table(string(sites(s).name), string(caseNames{c}), Wp(w), ...
-                   median(h), prctile(h, 95), max(h), fail, 'VariableNames', ...
-                   {'Site','Case','Wp','recover_h_median','recover_h_p95','recover_h_worst', ...
-                    'not_in_30_days_pct'})]; %#ok<AGROW>
+                   median(h), prctile(h, 95), max(h), fail, median(h7), prctile(h7, 95), fail7, ...
+                   'VariableNames', {'Site','Case','Wp','recover_h_median','recover_h_p95', ...
+                   'recover_h_worst','not_in_30_days_pct','SC7_recover_h_median', ...
+                   'SC7_recover_h_p95','SC7_not_in_30_days_pct'})]; %#ok<AGROW>
         end
     end
 end
 fprintf('Supercapacitor recovery from empty to 3 charges by sun alone [h]\n');
-fprintf('(energy needed %.0f J; 720 h = not within 30 days):\n', dE);
+fprintf('(energy needed %.0f J for 6 cells, %.0f J for 7 cells; 720 h = not within 30 days):\n', dE, dE7);
 disp(TRc);
 writetable(TRc, 'step4_recovery.csv');
 
 %% Figure
 cols = [0.00 0.45 0.74; 0.85 0.33 0.10; 0.47 0.67 0.19; 0.49 0.18 0.56];
-f = figure('Color','w','Position',[60 60 1200 470]);
-tl = tiledlayout(f, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+f = figure('Color','w','Position',[40 60 1650 500]);
+tl = tiledlayout(f, 1, 3, 'TileSpacing', 'compact', 'Padding', 'compact');
 ax1 = nexttile(tl); hold(ax1,'on'); box(ax1,'on'); grid(ax1,'on');
+ax3 = nexttile(tl); hold(ax3,'on'); box(ax3,'on'); grid(ax3,'on');
 ax2 = nexttile(tl); hold(ax2,'on'); box(ax2,'on'); grid(ax2,'on');
 h_floor = 0.5;                                          % zero is drawn at this level on the log axis
 for s = 1:nS
@@ -168,6 +179,9 @@ for s = 1:nS
         xo = 2^(((s-2.5)*2 + (c-1.5))*0.025);              % small sideways shift so lines do not hide each other
         r = TA(TA.Site==sites(s).name & TA.Case==caseNames{c} & TA.drain_mA==0.1, :);
         short_h = (100 - r.SC_ready3_pct)/100 * 8766;      % hours per year below 3 charges
+        short7 = (100 - r.SC7_ready3_pct)/100 * 8766;
+        plot(ax3, r.Wp*xo, max(short7, h_floor), ls, 'Color', cols(s,:), 'LineWidth', 1.3, 'MarkerSize', 5, ...
+             'HandleVisibility', 'off');
         plot(ax1, r.Wp*xo, max(short_h, h_floor), ls, 'Color', cols(s,:), 'LineWidth', 1.3, 'MarkerSize', 5, ...
              'DisplayName', sprintf('%s, %s', sites(s).name, strrep(caseNames{c}, '_mid', '')));
         q = TRc(TRc.Site==sites(s).name & TRc.Case==caseNames{c}, :);
@@ -175,15 +189,17 @@ for s = 1:nS
              'HandleVisibility', 'off');
     end
 end
-set([ax1 ax2], 'XScale', 'log', 'XLim', [0.08 6], 'XTick', Wp, 'FontName', 'Times New Roman', 'FontSize', 12);
-set(ax1, 'YScale', 'log', 'YLim', [0.35 3000], 'YTick', [0.5 1 3 10 30 100 300 1000 3000], ...
+set([ax1 ax3 ax2], 'XScale', 'log', 'XLim', [0.08 6], 'XTick', Wp, 'FontName', 'Times New Roman', 'FontSize', 12);
+set([ax1 ax3], 'YScale', 'log', 'YLim', [0.35 3000], 'YTick', [0.5 1 3 10 30 100 300 1000 3000], ...
     'YTickLabel', {'0','1','3','10','30','100','300','1000','3000'}, 'YMinorGrid', 'on');
 set(ax2, 'YScale', 'log', 'YLim', [8 800], 'YTick', [8 10 12 15 20 30 50 100 200 400 720], ...
     'YMinorGrid', 'on');
 xlabel(ax1, 'Panel rating (W peak)'); ylabel(ax1, 'Hours per year with fewer than 3 shock charges');
-title(ax1, '(a) Supercapacitor kept ready by solar (0.1 mA drain)', 'FontWeight', 'normal');
+title(ax1, '(a) 6 cells at 2.3 V, solar, 0.1 mA drain', 'FontWeight', 'normal');
+xlabel(ax3, 'Panel rating (W peak)'); ylabel(ax3, 'Hours per year with fewer than 3 shock charges');
+title(ax3, '(b) 7 cells at 2.3 V, solar, 0.1 mA drain', 'FontWeight', 'normal');
 xlabel(ax2, 'Panel rating (W peak)'); ylabel(ax2, 'Hours to refill to 3 charges (95th percentile)');
-title(ax2, '(b) Supercapacitor refill after a rescue', 'FontWeight', 'normal');
+title(ax2, '(c) Refill of 6 cells after a rescue', 'FontWeight', 'normal');
 lgd = legend(ax1, 'NumColumns', 4, 'Box', 'off'); lgd.Layout.Tile = 'south';
 set(lgd, 'FontName', 'Times New Roman', 'FontSize', 11);
 exportgraphics(f, 'fig_step4_solar.png', 'Resolution', 300);
@@ -222,6 +238,58 @@ function S = sim_lfp(Pch, T, L, drain)
         soc = min(max(soc, 0), 1);
         S(n) = soc;
     end
+end
+
+function [h, fail] = refill_hours(net, starts, dE, H)
+% Hours from each start until the net energy gained reaches dE (H if never).
+    cs = [0; cumsum(net(:))];
+    h = nan(numel(starts),1);
+    for j = 1:numel(starts)
+        i0 = starts(j);
+        k = find(cs(i0+1:i0+H) - cs(i0) >= dE, 1);
+        if ~isempty(k), h(j) = k; end
+    end
+    fail = mean(isnan(h))*100;
+    h(isnan(h)) = H;
+end
+
+function n = sc_count(p, s, eta, v0, nmax)
+% Full charges of the HV capacitor from a supercapacitor string starting at v0
+% (same equations as step 2 and step 3).
+    v_sc = v0; n = 0;
+    while n < nmax && v_sc > s.Vmin
+        opts = odeset('Events', @(t,x) ev(x), 'RelTol', 1e-7, 'AbsTol', 1e-7);
+        [~, ~, ~, xe, ie] = ode45(@(t,x) rhs(x), [0 600], [0; v_sc], opts);
+        if isempty(ie) || ie(end) ~= 1, break; end
+        n = n + 1; v_sc = xe(end,2);
+    end
+    function dx = rhs(x)
+        v_hv = x(1); vs = x(2);
+        P_avail = min(s.P_set, max(vs - s.I_in_max*s.ESR, 0)*s.I_in_max);
+        I = solve_current(vs, s.ESR, P_avail);
+        i_hv = min(eta*P_avail/max(v_hv,1e-3), p.I_out_max);
+        P_used = i_hv*v_hv/eta;
+        I_used = I*P_used/max(P_avail,1e-9);
+        dx = [ (i_hv - v_hv/p.R_leak)/p.C_hv ; -I_used/s.C ];
+    end
+    function [val, term, dir] = ev(x)
+        val = [x(1) - p.V_target; x(2) - s.Vmin]; term = [1;1]; dir = [1;-1];
+    end
+end
+
+function V = sc_vneed(p, s, eta, k)
+    lo = s.Vmin; hi = s.Vmax;
+    if sc_count(p, s, eta, hi, k) < k, V = NaN; return; end
+    for it = 1:30
+        mid = 0.5*(lo + hi);
+        if sc_count(p, s, eta, mid, k) >= k, hi = mid; else, lo = mid; end
+    end
+    V = hi;
+end
+
+function I = solve_current(V, R, P)
+    disc = V^2 - 4*R*P;
+    if disc < 0, I = V/(2*R); else, I = (V - sqrt(disc))/(2*R); end
 end
 
 function w = first_wp(Wp, pct)

@@ -14,6 +14,7 @@ A physics-constrained comparison of power and energy-storage designs for automat
 | `shock/` | 1 | Closed-form biphasic truncated exponential shock at the seven IEC test loads |
 | `charger/` | 2 | Averaged flyback charging of the shock capacitor from a hand crank, a supercapacitor string and an LFP battery |
 | `storage/` | 3 | Supercapacitor and LFP battery ageing and self-discharge in Nigerian heat (NASA POWER hourly weather, cabinet and parked-vehicle cases), plus crank start-up time |
+| `solar/` | 4 | Smallest solar panel that keeps the supercapacitor or LFP battery ready every hour, and refill time after a rescue |
 
 ## How to run (MATLAB Online R2026b)
 
@@ -25,6 +26,8 @@ cd ../charger
 step2_charger_average
 cd ../storage
 step3_storage_heat
+cd ../solar
+step4_solar_sizing
 ```
 
 Step 3 downloads hourly weather from NASA POWER (no account needed) into `storage/data` on its first run.

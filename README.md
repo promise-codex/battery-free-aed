@@ -15,6 +15,7 @@ A physics-constrained comparison of power and energy-storage designs for automat
 | `charger/` | 2 | Averaged flyback charging of the shock capacitor from a hand crank, a supercapacitor string and an LFP battery |
 | `storage/` | 3 | Supercapacitor and LFP battery ageing and self-discharge in Nigerian heat (NASA POWER hourly weather, cabinet and parked-vehicle cases), plus crank start-up time |
 | `solar/` | 4 | Smallest solar panel that keeps the supercapacitor or LFP battery ready every hour, and refill time after a rescue |
+| `logger/` | Field | Arduino heat logger that measures temperature inside a parked car and a closed cabinet (not yet built) |
 
 ## How to run (MATLAB Online R2026b)
 
